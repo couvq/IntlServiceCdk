@@ -23,6 +23,14 @@ export class IntlServiceStack extends Stack {
       }
     );
 
+    // give lambda permission to call aws translate
+    const translatePolicyStatement = new PolicyStatement({
+      effect: Effect.ALLOW,
+      resources: ["*"],
+      actions: ["translate:TranslateText"],
+    });
+    translateIntlFileLambda.addToRolePolicy(translatePolicyStatement)
+
     const api = new LambdaRestApi(this, "IntlServiceApi", {
       handler: translateIntlFileLambda,
       proxy: false,
