@@ -1,5 +1,9 @@
 import { Stack, StackProps } from "aws-cdk-lib";
-import { LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
+import {
+  AuthorizationType,
+  LambdaRestApi,
+  TokenAuthorizer,
+} from "aws-cdk-lib/aws-apigateway";
 import {
   Effect,
   ManagedPolicy,
@@ -23,17 +27,31 @@ export class IntlServiceStack extends Stack {
       }
     );
 
+    const githubAuthLambda = new Function(this, "GithubAuthLambda", {
+      runtime: Runtime.NODEJS_18_X,
+      code: Code.fromAsset("lambda/authorizer"),
+      handler: "githubAuthorizer.handler",
+    });
+
+    const githubAuthorizer = new TokenAuthorizer(this, "GithubAuthorizer", {
+      handler: githubAuthLambda,
+    });
+
     // give lambda permission to call aws translate
     const translatePolicyStatement = new PolicyStatement({
       effect: Effect.ALLOW,
       resources: ["*"],
       actions: ["translate:TranslateText"],
     });
-    translateIntlFileLambda.addToRolePolicy(translatePolicyStatement)
+    translateIntlFileLambda.addToRolePolicy(translatePolicyStatement);
 
     const api = new LambdaRestApi(this, "IntlServiceApi", {
       handler: translateIntlFileLambda,
       proxy: false,
+      defaultMethodOptions: {
+        authorizationType: AuthorizationType.CUSTOM,
+        authorizer: githubAuthorizer,
+      },
     });
 
     api.root.addResource("translate").addMethod(HttpMethod.POST.toString());
