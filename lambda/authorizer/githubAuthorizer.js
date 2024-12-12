@@ -1,31 +1,7 @@
-// A simple token-based authorizer example to demonstrate how to use an authorization token
-// to allow or deny a request. In this example, the caller named 'user' is allowed to invoke
-// a request if the client-supplied token value is 'allow'. The caller is not allowed to invoke
-// the request if the token value is 'deny'. If the token value is 'unauthorized' or an empty
-// string, the authorizer function returns an HTTP 401 status code. For any other token value,
-// the authorizer returns an HTTP 500 status code.
-// Note that token values are case-sensitive.
-
-exports.handler = async (event, context, callback) => {
-  var token = event.authorizationToken;
-  console.log(`Auth token received from user:` + token);
-  switch (token) {
-    case "allow":
-      callback(null, generatePolicy("user", "Allow", event.methodArn));
-      break;
-    case "deny":
-      callback(null, generatePolicy("user", "Deny", event.methodArn));
-      break;
-    case "unauthorized":
-      callback("Unauthorized"); // Return a 401 Unauthorized response
-      break;
-    default:
-      callback("Error: Invalid token"); // Return a 500 Invalid token response
-  }
-};
+/* global fetch */
 
 // Help function to generate an IAM policy
-var generatePolicy = function (principalId, effect, resource) {
+const generatePolicy = function (principalId, effect, resource) {
   var authResponse = {};
 
   authResponse.principalId = principalId;
@@ -42,10 +18,51 @@ var generatePolicy = function (principalId, effect, resource) {
   }
 
   // Optional output with custom properties of the String, Number or Boolean type.
+  // todo - pretty sure I can use this to pass context over to the main lambda, useful for when I want to know user info
   authResponse.context = {
     stringKey: "stringval",
     numberKey: 123,
     booleanKey: true,
   };
   return authResponse;
+};
+
+/**
+ * Class to make calls to github apis.
+ */
+class GithubClient {
+  async fetchGithubUserFromToken(token) {
+    const githubFetchParams = {
+      method: "GET",
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        Authorization: `Bearer ${token}`,
+      },
+    };
+    const githubUsersUrl = "https://api.github.com/user";
+    const res = await fetch(githubUsersUrl, githubFetchParams);
+    return res.json();
+  }
+}
+
+// code built from aws example https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html#api-gateway-lambda-authorizer-token-lambda-function-create
+exports.handler = async (event, context, callback) => {
+  const githubToken = event.authorizationToken;
+  if (!githubToken) callback("Unauthorized");
+  console.log(`Github token received in request: ${githubToken}`);
+
+  const githubClient = new GithubClient();
+  const githubUser = await githubClient.fetchGithubUserFromToken(githubToken);
+  if (!githubUser || !githubUser.id) callback("Unauthorized");
+
+  console.log(
+    `User is authenticated with github: ${JSON.stringify(githubUser)}`
+  );
+
+  /**
+   * TODO - once your own users db is built, check if the github userId matches an onboarded user,
+   * return unauthorized or explicit deny if they are not onboarded
+   */
+  callback(null, generatePolicy("user", "Allow", event.methodArn));
 };
