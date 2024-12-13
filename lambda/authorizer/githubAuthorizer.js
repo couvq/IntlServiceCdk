@@ -1,4 +1,5 @@
 /* global fetch */
+const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
 
 // Help function to generate an IAM policy
 const generatePolicy = function (principalId, effect, resource) {
@@ -60,9 +61,21 @@ exports.handler = async (event, context, callback) => {
     `User is authenticated with github: ${JSON.stringify(githubUser)}`
   );
 
-  /**
-   * TODO - once your own users db is built, check if the github userId matches an onboarded user,
-   * return unauthorized or explicit deny if they are not onboarded
-   */
+  const ddbInput = {
+    ExpressionAttributeValues: {
+      ":v1": {
+        N: `${githubUser.id}`,
+      },
+    },
+    KeyConditionExpression: "githubUserId = :v1",
+    TableName: "GithubUsersTable",
+  };
+  const ddbClient = new DynamoDBClient();
+  const command = new QueryCommand(ddbInput);
+  const ddbResponse = await ddbClient.send(command);
+  console.log(`Response from ddb: ${JSON.stringify(ddbResponse.Items)}`);
+  if (!ddbResponse.Items.length)
+    callback("Unauthorized: User has not onboarded to use the cli tool.");
+
   callback(null, generatePolicy("user", "Allow", event.methodArn));
 };

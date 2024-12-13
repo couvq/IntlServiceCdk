@@ -84,7 +84,9 @@ class TranslateServiceClient {
     };
     const command = new TranslateTextCommand(input);
     const response = await this.translateClient.send(command);
-    console.log(`response received from translate service: ${response}`);
+    console.log(
+      `response received from translate service: ${JSON.stringify(response)}`
+    );
     return response.TranslatedText;
   }
 
